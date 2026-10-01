@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Black Hole Arena</title>
+    <style>
+      :root {
+        --bg-1: #06070b;
+        --bg-2: #101623;
+        --panel: rgba(12, 18, 28, 0.72);
+        --line: rgba(255,255,255,0.08);
+        --text: #edf3ff;
+        --muted: #a7b6d6;
+        --accent: #7ef7d6;
+        --danger: #ff6d7d;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background:
+          radial-gradient(circle at 20% 20%, rgba(123, 164, 255, 0.16), transparent 22%),
+          radial-gradient(circle at 80% 30%, rgba(126, 247, 214, 0.08), transparent 25%),
+          linear-gradient(180deg, var(--bg-2), var(--bg-1));
+        color: var(--text);
+        font-family: Inter, "Segoe UI", sans-serif;
+        overflow: hidden;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      .game-shell {
+        position: relative;
+        width: min(96vw, 1100px);
+        height: min(92vh, 720px);
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(9, 14, 22, 0.85);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), inset 0 0 25px rgba(255, 255, 255, 0.02);
+        overflow: hidden;
+      }
+
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        background:
+          radial-gradient(circle at center, rgba(32, 59, 92, 0.25), rgba(11, 14, 20, 0.2) 45%, rgba(7, 10, 16, 0.8) 100%);
+        cursor: crosshair;
+      }
+
+      .hud {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        pointer-events: none;
+      }
+
+      .board, .status {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        backdrop-filter: blur(8px);
+        padding: 10px 14px;
+        box-shadow: inset 0 0 18px rgba(255,255,255,0.02);
+      }
+
+      .board {
+        display: flex;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .stat {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .value {
+        display: block;
+        margin-top: 2px;
+        font-size: 20px;
+        color: var(--text);
+        letter-spacing: 0.02em;
+      }
+
+      .status {
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(7, 10, 16, 0.28);
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      .overlay.hidden { display: none; }
+
+      .panel {
+        background: rgba(8, 13, 22, 0.7);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 18px;
+        padding: 26px 30px;
+        text-align: center;
+        width: min(440px, 82%);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        letter-spacing: 0.04em;
+        font-size: clamp(32px, 3.2vw, 46px);
+      }
+
+      .subtitle {
+        color: var(--muted);
+        line-height: 1.5;
+        margin: 0 0 16px;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .controls span {
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.02);
+        padding: 7px 10px;
+        border-radius: 999px;
+      }
+
+      @media (max-width: 620px) {
+        .game-shell {
+          width: 100vw;
+          height: 100vh;
+          border-radius: 0;
+        }
+
+        .hud {
+          top: 8px;
+          left: 8px;
+          right: 8px;
+        }
+
+        .board {
+          gap: 10px;
+          padding: 8px 10px;
+        }
+
+        .stat { font-size: 10px; }
+        .value { font-size: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game-shell">
+      <canvas id="game"></canvas>
+
+      <div class="hud">
+        <div class="board">
+          <div class="stat">Score<div class="value" id="score">0</div></div>
+          <div class="stat">Size<div class="value" id="size">42</div></div>
+          <div class="stat">Best<div class="value" id="best">0</div></div>
+        </div>
+        <div class="status" id="status">Hunt</div>
+      </div>
+
+      <div class="overlay" id="overlay">
+        <div class="panel">
+          <h1>BLACK HOLE</h1>
+          <p class="subtitle">
+            Eat smaller objects and rivals. Grow into a massive void before the arena swallows you.
+          </p>
+          <div class="controls">
+            <span>Move: Mouse</span>
+            <span>Boost: WASD</span>
+            <span>Start: Click</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const overlay = document.getElementById('overlay');
+      const scoreEl = document.getElementById('score');
+      const sizeEl = document.getElementById('size');
+      const bestEl = document.getElementById('best');
+      const statusEl = document.getElementById('status');
+
+      const WORLD = { width: 2200, height: 1800 };
+      const worldCenter = { x: WORLD.width / 2, y: WORLD.height / 2 };
+
+      let state = 'start';
+      let lastTime = 0;
+      let pointer = { x: worldCenter.x, y: worldCenter.y };
+      let keyState = {};
+      let best = Number(localStorage.getItem('black-hole-best') || 0);
+
+      const player = {
+        x: worldCenter.x,
+        y: worldCenter.y,
+        radius: 42,
+        vx: 0,
+        vy: 0,
+        speed: 420,
+        score: 0,
+        boost: 1.5,
+      };
+
+      const enemies = [];
+      const items = [];
+
+      function resizeCanvas() {
+        const shell = canvas.parentElement.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = shell.width * ratio;
+        canvas.height = shell.height * ratio;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function rand(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function worldToScreen(x, y) {
+        const rect = canvas.getBoundingClientRect();
+        const camX = clamp(player.x - rect.width / 2, 0, WORLD.width - rect.width);
+        const camY = clamp(player.y - rect.height / 2, 0, WORLD.height - rect.height);
+        return {
+          x: x - camX,
+          y: y - camY,
+        };
+      }
+
+      function createItem() {
+        const radius = rand(8, 18);
+        const orbitBias = Math.random();
+        return {
+          x: rand(80, WORLD.width - 80),
+          y: rand(80, WORLD.height - 80),
+          radius,
+          value: radius * radius * 0.8,
+          hue: 50 + Math.random() * 100,
+          pulse: Math.random() * Math.PI * 2,
+          drift: rand(0.25, 1.4),
+          offsetX: orbitBias > 0.5 ? rand(-30, 30) : 0,
+          offsetY: orbitBias <= 0.5 ? rand(-30, 30) : 0,
+        };
+      }
+
+      function createEnemy(sizeBias = 0) {
+        const radius = rand(24, 65) + sizeBias;
+        const x = rand(120, WORLD.width - 120);
+        const y = rand(120, WORLD.height - 120);
+        return {
+          x,
+          y,
+          radius,
+          vx: rand(-40, 40),
+          vy: rand(-40, 40),
+          speed: rand(120, 180),
+          color: `hsl(${rand(330, 360)}, 80%, 62%)`,
+          aggro: Math.random() * 0.8 + 0.6,
+          scoreValue: radius * 4,
+        };
+      }
+
+      function resetGame() {
+        player.x = worldCenter.x;
+        player.y = worldCenter.y;
+        player.radius = 42;
+        player.vx = 0;
+        player.vy = 0;
+        player.score = 0;
+
+        items.length = 0;
+        enemies.length = 0;
+
+        for (let i = 0; i < 180; i++) items.push(createItem());
+        for (let i = 0; i < 8; i++) enemies.push(createEnemy());
+
+        updateHud();
+      }
+
+      function updateHud() {
+        const displaySize = Math.round(player.radius);
+        scoreEl.textContent = Math.round(player.score);
+        sizeEl.textContent = displaySize;
+        bestEl.textContent = Math.round(best);
+      }
+
+      function handleInput(dt) {
+        const inputX = (keyState['d'] || keyState['arrowright']) ? 1 : 0 - (keyState['a'] || keyState['arrowleft'] ? 1 : 0);
+        const inputY = (keyState['s'] || keyState['arrowdown']) ? 1 : 0 - (keyState['w'] || keyState['arrowup'] ? 1 : 0);
+
+        let dx = pointer.x - player.x;
+        let dy = pointer.y - player.y;
+        let mag = Math.hypot(dx, dy);
+
+        let moveX = 0;
+        let moveY = 0;
+
+        if (mag > 10) {
+          moveX += (dx / mag) * player.speed;
+          moveY += (dy / mag) * player.speed;
+        }
+
+        moveX += inputX * (player.speed * player.boost);
+        moveY += inputY * (player.speed * player.boost);
+
+        player.vx += (moveX - player.vx) * 0.24;
+        player.vy += (moveY - player.vy) * 0.24;
+
+        const speedLimit = player.speed * 1.2;
+        const currentSpeed = Math.hypot(player.vx, player.vy);
+        if (currentSpeed > speedLimit) {
+          const scale = speedLimit / currentSpeed;
+          player.vx *= scale;
+          player.vy *= scale;
+        }
+
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+
+        player.x = clamp(player.x, player.radius, WORLD.width - player.radius);
+        player.y = clamp(player.y, player.radius, WORLD.height - player.radius);
+      }
+
+      function absorbItem(item) {
+        const eatenAmount = item.value * 0.26;
+        player.radius = Math.sqrt(player.radius * player.radius + eatenAmount * 1.8);
+        player.score += item.value * 0.7;
+      }
+
+      function eatObject(target) {
+        const growth = target.radius * target.radius * 0.2;
+        player.radius = Math.sqrt(player.radius * player.radius + growth);
+        player.score += target.scoreValue || target.radius * 2.5;
+      }
+
+      function updateWorld(dt) {
+        handleInput(dt);
+
+        for (let i = items.length - 1; i >= 0; i--) {
+          const item = items[i];
+          const dist = distance(item, player);
+          if (dist < player.radius + item.radius + 4) {
+            absorbItem(item);
+            items.splice(i, 1);
+            if (Math.random() < 0.34) items.push(createItem());
+          }
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const enemy = enemies[i];
+          const dx = player.x - enemy.x;
+          const dy = player.y - enemy.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist > 0.1) {
+            const targetSize = Math.max(player.radius * 0.9, 18);
+            let chase = 0;
+            if (enemy.radius < player.radius && dist < 400) {
+              chase = 1;
+            } else if (enemy.radius > player.radius && dist < 120) {
+              chase = -0.7;
+            }
+
+            if (chase !== 0) {
+              enemy.vx += (dx / dist) * enemy.speed * chase * dt;
+              enemy.vy += (dy / dist) * enemy.speed * chase * dt;
+            }
+          }
+
+          if (Math.hypot(enemy.vx, enemy.vy) > enemy.speed * 1.4) {
+            const scale = (enemy.speed * 1.4) / Math.hypot(enemy.vx, enemy.vy);
+            enemy.vx *= scale;
+            enemy.vy *= scale;
+          }
+
+          enemy.x += enemy.vx * dt;
+          enemy.y += enemy.vy * dt;
+          enemy.x = clamp(enemy.x, enemy.radius, WORLD.width - enemy.radius);
+          enemy.y = clamp(enemy.y, enemy.radius, WORLD.height - enemy.radius);
+
+          const playerGap = distance(player, enemy);
+          if (playerGap < player.radius + enemy.radius * 0.8) {
+            if (player.radius > enemy.radius * 1.12) {
+              eatObject(enemy);
+              enemies.splice(i, 1);
+              enemies.push(createEnemy(Math.min(12, player.radius * 0.05)));
+            } else {
+              state = 'gameover';
+              overlay.classList.remove('hidden');
+              overlay.innerHTML = `
+                <div class="panel">
+                  <h1>Game Over</h1>
+                  <p class="subtitle">You were consumed by a larger black hole. Final score: ${Math.round(player.score)}.</p>
+                  <div class="controls">
+                    <span>click to restart</span>
+                  </div>
+                </div>
+              `;
+              best = Math.max(best, Math.round(player.score));
+              localStorage.setItem('black-hole-best', String(best));
+              updateHud();
+              return;
+            }
+          }
+        }
+
+        for (let i = items.length - 1; i >= 0; i--) {
+          const item = items[i];
+          item.pulse += dt * (item.drift * 1.8);
+          const swayX = Math.sin(item.pulse + item.offsetX) * 8;
+          const swayY = Math.cos(item.pulse + item.offsetY) * 8;
+          item.x = clamp(item.x + swayX * dt * 12, 0, WORLD.width);
+          item.y = clamp(item.y + swayY * dt * 12, 0, WORLD.height);
+        }
+
+        while (items.length < 180) items.push(createItem());
+        while (enemies.length < 8) enemies.push(createEnemy());
+
+        player.radius = clamp(player.radius, 22, 260);
+        statusEl.textContent = player.radius > 145 ? 'Dominant' : player.radius > 95 ? 'Growing' : 'Hunt';
+        updateHud();
+      }
+
+      function drawBackground() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const rect = canvas.getBoundingClientRect();
+        const camX = clamp(player.x - rect.width / 2, 0, WORLD.width - rect.width);
+        const camY = clamp(player.y - rect.height / 2, 0, WORLD.height - rect.height);
+
+        ctx.fillStyle = '#080d16';
+        ctx.fillRect(0, 0, rect.width, rect.height);
+
+        for (let i = 0; i < 22; i++) {
+          const x = ((i * 181) + camX * 0.18) % (rect.width + 80) - 40;
+          const y = ((i * 137) + camY * 0.14) % (rect.height + 80) - 40;
+          ctx.fillStyle = 'rgba(255,255,255,0.025)';
+          ctx.fillRect(x, y, 2, 2);
+        }
+
+        ctx.save();
+        ctx.translate(-camX, -camY);
+
+        ctx.strokeStyle = 'rgba(160,190,255,0.05)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= WORLD.width; x += 90) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, WORLD.height);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= WORLD.height; y += 90) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(WORLD.width, y);
+          ctx.stroke();
+        }
+
+        for (const item of items) {
+          const glow = 8 + item.radius * 1.4;
+          ctx.save();
+          ctx.beginPath();
+          ctx.fillStyle = `hsla(${item.hue}, 90%, 62%, 0.9)`;
+          ctx.shadowColor = `hsla(${item.hue}, 90%, 62%, 0.8)`;
+          ctx.shadowBlur = 12;
+          ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(255,255,255,0.35)';
+          ctx.arc(item.x - item.radius * 0.26, item.y - item.radius * 0.28, item.radius * 0.28, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        for (const enemy of enemies) {
+          const g = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, enemy.radius * 1.4);
+          g.addColorStop(0, 'rgba(255,255,255,0.18)');
+          g.addColorStop(0.2, enemy.color);
+          g.addColorStop(1, 'rgba(0,0,0,0.25)');
+
+          ctx.beginPath();
+          ctx.fillStyle = g;
+          ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(0,0,0,0.25)';
+          ctx.arc(enemy.x - enemy.radius * 0.25, enemy.y - enemy.radius * 0.25, enemy.radius * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+
+        const playerScreen = worldToScreen(player.x, player.y);
+        const gradient = ctx.createRadialGradient(
+          playerScreen.x,
+          playerScreen.y,
+          player.radius * 0.2,
+          playerScreen.x,
+          playerScreen.y,
+          player.radius * 2.8
+        );
+        gradient.addColorStop(0, 'rgba(255,255,255,0.7)');
+        gradient.addColorStop(0.12, 'rgba(120,146,255,0.66)');
+        gradient.addColorStop(0.38, 'rgba(0,0,0,0.9)');
+        gradient.addColorStop(1, 'rgba(0,0,0,1)');
+
+        ctx.beginPath();
+        ctx.fillStyle = gradient;
+        ctx.arc(playerScreen.x, playerScreen.y, player.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.arc(playerScreen.x - player.radius * 0.28, playerScreen.y - player.radius * 0.30, player.radius * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function frame(ts) {
+        const dt = clamp((ts - lastTime) / 1000 || 0.016, 0.008, 0.03);
+        lastTime = ts;
+
+        if (state === 'playing') updateWorld(dt);
+        drawBackground();
+        requestAnimationFrame(frame);
+      }
+
+      function startGame() {
+        resetGame();
+        state = 'playing';
+        overlay.classList.add('hidden');
+      }
+
+      canvas.addEventListener('pointermove', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const camX = clamp(player.x - rect.width / 2, 0, WORLD.width - rect.width);
+        const camY = clamp(player.y - rect.height / 2, 0, WORLD.height - rect.height);
+        pointer.x = clamp(event.clientX + camX, 0, WORLD.width);
+        pointer.y = clamp(event.clientY + camY, 0, WORLD.height);
+      });
+
+      canvas.addEventListener('pointerdown', () => {
+        if (state !== 'playing') {
+          startGame();
+        }
+      });
+
+      window.addEventListener('keydown', (event) => {
+        keyState[event.key.toLowerCase()] = true;
+        if (event.key === ' ') {
+          event.preventDefault();
+        }
+        if (state !== 'playing' && ['enter', ' '].includes(event.key.toLowerCase())) {
+          startGame();
+        }
+      });
+
+      window.addEventListener('keyup', (event) => {
+        keyState[event.key.toLowerCase()] = false;
+      });
+
+      window.addEventListener('resize', resizeCanvas);
+
+      resetGame();
+      resizeCanvas();
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>
